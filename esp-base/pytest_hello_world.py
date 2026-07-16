@@ -47,7 +47,7 @@ def verify_elf_sha256_embedding(app: QemuApp, sha256_reported: str) -> None:
 
 @pytest.mark.host_test
 @pytest.mark.qemu
-@idf_parametrize('target', ['esp32', 'esp32c3'], indirect=['target'])
+@idf_parametrize('target', ['esp32', 'esp32c3', 'esp32s3'], indirect=['target'])
 def test_hello_world_host(app: QemuApp, dut: QemuDut) -> None:
     sha256_reported = dut.expect(r'ELF file SHA256:\s+([a-f0-9]+)').group(1).decode('utf-8')
     verify_elf_sha256_embedding(app, sha256_reported)

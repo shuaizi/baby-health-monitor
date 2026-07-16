@@ -9,9 +9,61 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_system.h"
+#include "ssd1306.h"
+
+#define LED_GPIO GPIO_NUM_48
+#define LED_BLINK_COUNT 10
+#define LED_INTERVAL_MS 1000
+#define SSD1306_SDA_GPIO GPIO_NUM_8
+#define SSD1306_SCL_GPIO GPIO_NUM_9
+#define SSD1306_I2C_ADDRESS 0x3c
+
+static void blink_led(void)
+{
+    gpio_config_t led_config = {
+        .pin_bit_mask = 1ULL << LED_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&led_config);
+
+    for (int i = 0; i < LED_BLINK_COUNT; i++) {
+        gpio_set_level(LED_GPIO, 1);
+        printf("LED on (%d/%d)\n", i + 1, LED_BLINK_COUNT);
+        vTaskDelay(pdMS_TO_TICKS(LED_INTERVAL_MS));
+
+        gpio_set_level(LED_GPIO, 0);
+        printf("LED off (%d/%d)\n", i + 1, LED_BLINK_COUNT);
+        vTaskDelay(pdMS_TO_TICKS(LED_INTERVAL_MS));
+    }
+}
+
+static void show_display_demo(void)
+{
+    const ssd1306_config_t display_config = {
+        .sda_pin = SSD1306_SDA_GPIO,
+        .scl_pin = SSD1306_SCL_GPIO,
+        .i2c_address = SSD1306_I2C_ADDRESS,
+        .i2c_clock_hz = 400000,
+    };
+    ssd1306_device_t *display;
+    esp_err_t result = ssd1306_init(&display, &display_config);
+
+    if (result != ESP_OK) {
+        printf("SSD1306 initialization failed: %s\n", esp_err_to_name(result));
+        return;
+    }
+
+    ssd1306_clear(display);
+    ssd1306_draw_text(display, 0, 0, "BABY HEALTH");
+    ssd1306_draw_text(display, 0, 12, "SSD1306 READY");
+    ssd1306_draw_text(display, 0, 24, "I2C: 0X3C");
+    result = ssd1306_show(display);
+    printf("SSD1306 display update: %s\n", esp_err_to_name(result));
+}
 
 void app_main(void)
 {
@@ -41,6 +93,9 @@ void app_main(void)
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
+
+    show_display_demo();
+    blink_led();
 
     for (int i = 10; i >= 0; i--) {
         printf("Restarting in %d seconds...\n", i);
