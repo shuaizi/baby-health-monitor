@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "driver/i2c_master.h"
+#include "esp_log.h"
 
 #define SSD1306_WIDTH 128
 #define SSD1306_HEIGHT 32
@@ -12,8 +13,12 @@
 #define SSD1306_COMMAND_PREFIX 0x00
 #define SSD1306_DATA_PREFIX 0x40
 #define SSD1306_TRANSFER_TIMEOUT_MS 1000
+#define SSD1306_PROBE_TIMEOUT_MS 100
+
+static const char *TAG = "SSD1306";
 
 struct ssd1306_device {
+    i2c_master_bus_handle_t i2c_bus;
     i2c_master_dev_handle_t i2c_device;
     uint8_t framebuffer[SSD1306_BUFFER_SIZE];
 };
@@ -56,6 +61,7 @@ static const uint8_t *glyph_for(char character)
     };
     static const uint8_t colon[] = {0x00, 0x36, 0x36, 0x00, 0x00};
     static const uint8_t dash[] = {0x08, 0x08, 0x08, 0x08, 0x08};
+    static const uint8_t dot[] = {0x00, 0x60, 0x60, 0x00, 0x00};
 
     if (character >= '0' && character <= '9') {
         return digits[character - '0'];
@@ -69,6 +75,9 @@ static const uint8_t *glyph_for(char character)
     if (character == '-') {
         return dash;
     }
+    if (character == '.') {
+        return dot;
+    }
     return blank;
 }
 
@@ -81,12 +90,19 @@ static void set_pixel(ssd1306_device_t *device, uint8_t x, uint8_t y)
 
 esp_err_t ssd1306_init(ssd1306_device_t **device, const ssd1306_config_t *config)
 {
+    if (device == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *device = NULL;
+    if (config == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     static const uint8_t init_commands[] = {
         0xae, 0x20, 0x02, 0x40, 0x81, 0x7f, 0xa1, 0xa6, 0xa8, 0x1f,
         0xc8, 0xd3, 0x00, 0xd5, 0x80, 0xd9, 0xf1, 0xda, 0x02, 0xdb,
         0x40, 0x8d, 0x14, 0xaf,
     };
-    i2c_master_bus_handle_t bus_handle;
     i2c_master_bus_config_t bus_config = {
         .i2c_port = I2C_NUM_0,
         .sda_io_num = config->sda_pin,
@@ -106,19 +122,49 @@ esp_err_t ssd1306_init(ssd1306_device_t **device, const ssd1306_config_t *config
     if (new_device == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    result = i2c_new_master_bus(&bus_config, &bus_handle);
+    result = i2c_new_master_bus(&bus_config, &new_device->i2c_bus);
     if (result == ESP_OK) {
-        result = i2c_master_bus_add_device(bus_handle, &device_config, &new_device->i2c_device);
+        result = i2c_master_probe(new_device->i2c_bus, config->i2c_address, SSD1306_PROBE_TIMEOUT_MS);
+    }
+    if (result == ESP_OK) {
+        result = i2c_master_bus_add_device(new_device->i2c_bus, &device_config, &new_device->i2c_device);
     }
     if (result == ESP_OK) {
         result = send_commands(new_device, init_commands, sizeof(init_commands));
     }
     if (result != ESP_OK) {
-        free(new_device);
+        esp_err_t cleanup_result = ssd1306_deinit(new_device);
+        if (cleanup_result != ESP_OK) {
+            *device = new_device;
+            ESP_LOGW(TAG, "Failed to release display resources: %s", esp_err_to_name(cleanup_result));
+        }
         return result;
     }
 
     *device = new_device;
+    return ESP_OK;
+}
+
+esp_err_t ssd1306_deinit(ssd1306_device_t *device)
+{
+    if (device == NULL) {
+        return ESP_OK;
+    }
+    if (device->i2c_device != NULL) {
+        esp_err_t result = i2c_master_bus_rm_device(device->i2c_device);
+        if (result != ESP_OK) {
+            return result;
+        }
+        device->i2c_device = NULL;
+    }
+    if (device->i2c_bus != NULL) {
+        esp_err_t result = i2c_del_master_bus(device->i2c_bus);
+        if (result != ESP_OK) {
+            return result;
+        }
+        device->i2c_bus = NULL;
+    }
+    free(device);
     return ESP_OK;
 }
 

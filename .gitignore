@@ -1,3 +1,6 @@
 # ESP-IDF generated build output
 esp-base/build/
+# Local ESP-IDF configuration may contain Wi-Fi credentials.
+esp-base/sdkconfig
+esp-base/sdkconfig.old
 __pycache__/

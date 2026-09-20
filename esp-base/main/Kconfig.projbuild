@@ -1,0 +1,33 @@
+menu "Baby Health Monitor"
+
+    config BABY_HEALTH_WIFI_SSID
+        string "Wi-Fi SSID (2.4 GHz)"
+        default ""
+        help
+            Configure the local Wi-Fi network. An empty SSID disables Wi-Fi
+            and the HTTP metrics server, while sensor and display processing
+            continue. The value is saved in the local, Git-ignored sdkconfig.
+
+    config BABY_HEALTH_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Password for the configured network. Leave empty for an open
+            network. This is stored as plaintext in the local sdkconfig and
+            compiled into the firmware; it is not encrypted secret storage.
+            Never copy the real value into sdkconfig.defaults or commit it.
+
+    config BABY_HEALTH_DISPLAY_ENABLED
+        bool "Enable SSD1306 display (auto-detect on startup)"
+        default y
+        help
+            Probe the configured OLED I2C address once at startup. If no
+            device responds or initialization fails, continue without display
+            output. A display update failure also disables further rendering.
+            Reconnect the screen and restart the board to detect it again.
+
+            Disable this option to skip all display I2C initialization and
+            probing. Sensor sampling, Wi-Fi and Prometheus metrics are not
+            affected by this option.
+
+endmenu
